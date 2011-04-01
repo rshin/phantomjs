@@ -240,6 +240,9 @@ public slots:
     void setFormInputFile(QWebElement el, const QString &fileTag);
     bool render(const QString &fileName);
     void sleep(int ms);
+    void setOutputPath(const QString &path);
+    void write(const QString &output);
+    void writeln(const QString &output);
 
 private slots:
     void inject();
@@ -260,6 +263,7 @@ private:
     CSConverter *m_converter;
     QVariantMap m_paperSize; // For PDF output via render()
     QRect m_clipRect;
+    QFile *m_outputFile;
 };
 
 Phantom::Phantom(QObject *parent)
@@ -267,6 +271,7 @@ Phantom::Phantom(QObject *parent)
     , m_proxyPort(1080)
     , m_returnValue(0)
     , m_converter(0)
+    , m_outputFile(NULL)
 {
     QPalette palette = m_page.palette();
     palette.setBrush(QPalette::Base, Qt::transparent);
@@ -426,6 +431,7 @@ void Phantom::exit(int code)
 {
     m_returnValue = code;
     disconnect(&m_page, SIGNAL(loadFinished(bool)), this, SLOT(finish(bool)));
+    delete m_outputFile;
     QTimer::singleShot(0, qApp, SLOT(quit()));
 }
 
@@ -517,6 +523,27 @@ void Phantom::sleep(int ms)
     }
 }
 
+void Phantom::setOutputPath(const QString& path)
+{
+    if (m_outputFile) delete m_outputFile;
+
+    m_outputFile = new QFile(path);
+    m_outputFile->open(QIODevice::WriteOnly);
+}
+
+void Phantom::write(const QString& output)
+{
+    if (m_outputFile)
+        m_outputFile->write(qPrintable(output));
+}
+
+void Phantom::writeln(const QString& output)
+{
+    if (m_outputFile) {
+        m_outputFile->write(qPrintable(output));
+        m_outputFile->write("\n");
+    }
+}
 
 void Phantom::setFormInputFile(QWebElement el, const QString &fileTag)
 {
