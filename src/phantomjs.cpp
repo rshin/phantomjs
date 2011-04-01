@@ -120,6 +120,73 @@ QString WebPage::chooseFile(QWebFrame *parentFrame, const QString &suggestedFile
     return QString();
 }
 
+class NetworkCookieJar: public QNetworkCookieJar
+{
+public:
+    QVariantList cookies() const;
+    bool setCookies(const QVariantList& cookies);
+};
+
+QVariantList NetworkCookieJar::cookies() const
+{
+    QVariantList result;
+    foreach (const QNetworkCookie& cookie, QNetworkCookieJar::allCookies()) {
+        QVariantMap cookieEntry;
+        cookieEntry["domain"] = cookie.domain();
+        cookieEntry["name"] = QString(cookie.name());
+        cookieEntry["value"] = QString(cookie.value());
+        cookieEntry["path"] = cookie.path();
+
+        if (!cookie.isSessionCookie())
+            cookieEntry["expiration"] = cookie.expirationDate().toString("ddd, dd-MMM-yyyy hh:mm:ss 'GMT'");
+        if (cookie.isHttpOnly())
+            cookieEntry["httponly"] = true;
+        if (cookie.isSecure())
+            cookieEntry["secure"] = true;
+
+        result.append(cookieEntry);
+    }
+
+    return result;
+}
+
+bool NetworkCookieJar::setCookies(const QVariantList& cookies)
+{
+    QList<QNetworkCookie> newCookies;
+    foreach (const QVariant& listItem, cookies) {
+        if (!listItem.canConvert(QVariant::Map)) return false;
+        QVariantMap cookieEntry(listItem.toMap());
+
+        QNetworkCookie cookie;
+
+        if (!cookieEntry.contains("domain")) return false;
+        cookie.setDomain(cookieEntry.value("domain").toString());
+
+        if(!cookieEntry.contains("name")) return false;
+        cookie.setName(cookieEntry.value("name").toByteArray());
+
+        if(!cookieEntry.contains("value")) return false;
+        cookie.setValue(cookieEntry.value("value").toByteArray());
+
+        if (!cookieEntry.contains("path")) return false;
+        cookie.setPath(cookieEntry.value("path").toString());
+
+        if (cookieEntry.contains("expiration"))
+            cookie.setExpirationDate(QDateTime::fromString(cookieEntry.value("expiration").toString(), "ddd, dd-MMM-yyyy hh:mm:ss 'GMT'"));
+
+        if (cookieEntry.contains("httponly"))
+            cookie.setHttpOnly(cookieEntry.value("httponly").toBool());
+
+        if (cookieEntry.contains("secure"))
+            cookie.setSecure(cookieEntry.value("secure").toBool());
+
+        newCookies.append(cookie);
+    }
+
+    QNetworkCookieJar::setAllCookies(newCookies);
+    return true;
+}
+
 class Phantom: public QObject
 {
     Q_OBJECT
@@ -132,6 +199,7 @@ class Phantom: public QObject
     Q_PROPERTY(QVariantMap viewportSize READ viewportSize WRITE setViewportSize)
     Q_PROPERTY(QVariantMap paperSize READ paperSize WRITE setPaperSize)
     Q_PROPERTY(QVariantMap clipRect READ clipRect WRITE setClipRect)
+    Q_PROPERTY(QVariantList cookies READ cookies WRITE setCookies)
 
 public:
     Phantom(QObject *parent = 0);
@@ -163,6 +231,9 @@ public:
     void setPaperSize(const QVariantMap &size);
     QVariantMap paperSize() const;
 
+    QVariantList cookies() const;
+    bool setCookies(const QVariantList &cookies);
+
 public slots:
     void exit(int code = 0);
     void open(const QString &address);
@@ -182,6 +253,7 @@ private:
     int m_proxyPort;
     QString m_loadStatus;
     WebPage m_page;
+    NetworkCookieJar m_cookieJar;
     int m_returnValue;
     QString m_script;
     QString m_state;
@@ -279,6 +351,8 @@ Phantom::Phantom(QObject *parent)
 
     connect(m_page.mainFrame(), SIGNAL(javaScriptWindowObjectCleared()), SLOT(inject()));
     connect(&m_page, SIGNAL(loadFinished(bool)), this, SLOT(finish(bool)));
+
+    m_page.networkAccessManager()->setCookieJar(&m_cookieJar);
 
     m_page.settings()->setAttribute(QWebSettings::AutoLoadImages, autoLoadImages);
     m_page.settings()->setAttribute(QWebSettings::PluginsEnabled, pluginsEnabled);
@@ -536,6 +610,16 @@ void Phantom::setPaperSize(const QVariantMap &size)
 QVariantMap Phantom::paperSize() const
 {
     return m_paperSize;
+}
+
+QVariantList Phantom::cookies() const
+{
+    return m_cookieJar.cookies();
+}
+
+bool Phantom::setCookies(const QVariantList& cookies)
+{
+    return m_cookieJar.setCookies(cookies);
 }
 
 static qreal stringToPointSize(const QString &string)
