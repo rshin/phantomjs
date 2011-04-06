@@ -279,6 +279,8 @@ Phantom::Phantom(QObject *parent)
 
     bool autoLoadImages = true;
     bool pluginsEnabled = false;
+    QString storageLocation = QDesktopServices::storageLocation(QDesktopServices::DataLocation);
+
 
     // second argument: script name
     QStringList args = QApplication::arguments();
@@ -297,6 +299,10 @@ Phantom::Phantom(QObject *parent)
             const QString &fileName = fileInfo.at(1);
             m_page.m_allowedFiles[tag] = fileName;
             continue;
+        }
+        if (arg == "--storage-path" && argIterator.hasNext()) {
+          storageLocation = argIterator.next();
+          continue;
         }
         if (arg == "--load-images=yes") {
             autoLoadImages = true;
@@ -363,7 +369,7 @@ Phantom::Phantom(QObject *parent)
     m_page.settings()->setAttribute(QWebSettings::PluginsEnabled, pluginsEnabled);
 
     m_page.settings()->setAttribute(QWebSettings::OfflineStorageDatabaseEnabled, true);
-    m_page.settings()->setOfflineStoragePath(QDesktopServices::storageLocation(QDesktopServices::DataLocation));
+    m_page.settings()->setOfflineStoragePath(storageLocation);
 
     m_page.settings()->setAttribute(QWebSettings::LocalStorageDatabaseEnabled, true);
 
@@ -373,7 +379,7 @@ Phantom::Phantom(QObject *parent)
 
 #if QT_VERSION >= QT_VERSION_CHECK(4, 6, 0)
     m_page.settings()->setAttribute(QWebSettings::LocalStorageEnabled, true);
-    m_page.settings()->setLocalStoragePath(QDesktopServices::storageLocation(QDesktopServices::DataLocation));
+    m_page.settings()->setLocalStoragePath(storageLocation);
 #endif
 
     // Ensure we have document.body.
