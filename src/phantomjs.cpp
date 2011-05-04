@@ -193,6 +193,7 @@ class Phantom: public QObject
     Q_PROPERTY(QStringList args READ args)
     Q_PROPERTY(QString content READ content WRITE setContent)
     Q_PROPERTY(QString loadStatus READ loadStatus)
+    Q_PROPERTY(int loadTime READ loadTime)
     Q_PROPERTY(QString state READ state WRITE setState)
     Q_PROPERTY(QString userAgent READ userAgent WRITE setUserAgent)
     Q_PROPERTY(QVariantMap version READ version)
@@ -213,6 +214,8 @@ public:
     int returnValue() const;
 
     QString loadStatus() const;
+
+    int loadTime() const;
 
     void setState(const QString &value);
     QString state() const;
@@ -247,6 +250,7 @@ public slots:
 private slots:
     void inject();
     void finish(bool);
+    void loadStart();
     bool renderPdf(const QString &fileName);
 
 private:
@@ -255,6 +259,8 @@ private:
     QString m_proxyHost;
     int m_proxyPort;
     QString m_loadStatus;
+    QTime m_loadTimer;
+    int m_loadTime;
     WebPage m_page;
     NetworkCookieJar m_cookieJar;
     int m_returnValue;
@@ -264,6 +270,7 @@ private:
     QVariantMap m_paperSize; // For PDF output via render()
     QRect m_clipRect;
     QFile *m_outputFile;
+
 };
 
 Phantom::Phantom(QObject *parent)
@@ -362,6 +369,7 @@ Phantom::Phantom(QObject *parent)
 
     connect(m_page.mainFrame(), SIGNAL(javaScriptWindowObjectCleared()), SLOT(inject()));
     connect(&m_page, SIGNAL(loadFinished(bool)), this, SLOT(finish(bool)));
+    connect(&m_page, SIGNAL(loadStarted()), this, SLOT(loadStart()));
 
     m_page.networkAccessManager()->setCookieJar(&m_cookieJar);
 
@@ -441,9 +449,16 @@ void Phantom::exit(int code)
     QTimer::singleShot(0, qApp, SLOT(quit()));
 }
 
+void Phantom::loadStart()
+{
+    // Save the current time
+    m_loadTimer.start();
+}
+
 void Phantom::finish(bool success)
 {
     m_loadStatus = success ? "success" : "fail";
+    m_loadTime = m_loadTimer.elapsed();
     m_page.mainFrame()->evaluateJavaScript(m_script);
 }
 
@@ -455,6 +470,11 @@ void Phantom::inject()
 QString Phantom::loadStatus() const
 {
     return m_loadStatus;
+}
+
+int Phantom::loadTime() const
+{
+    return m_loadTime;
 }
 
 void Phantom::open(const QString &address)
